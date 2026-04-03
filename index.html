@@ -520,7 +520,7 @@ const CASES = [
     symptom:'Switch registers input on some presses but fails randomly on others. No consistent pattern — the same button works one press, fails the next. No correlation with press duration or force.',
     hypothesis:[
       'Cold solder joint on switch pin — mechanical flex temporarily restores contact then loses it',
-      'Jumper wire not fully seated in breadboard — loose contact; slight vibration from button press causes the wire to shift, intermittently breaking the connection.',
+      'Micro-crack in PCB trace near switch footprint, intermittently opening the path',
       'Oxidised contact surface causing variable resistance under the joint',
     ],
     test:'Probe FPGA input pin with oscilloscope during repeated presses. Switch to multimeter continuity mode across switch pins — listen for beep dropout mid-press. Wiggle the board to reproduce.',
@@ -555,23 +555,23 @@ const CASES = [
   },
   {
     id:'FA-03', badge:'wiring', badgeText:'Wiring',
-    title:'Wrong note — C4 press plays D4',
-    simMode:'wrong-C4',
-    symptom:'Pressing the switch physically labeled C4 consistently produces D4 frequency output. Failure is deterministic — always wrong, never correct. Adjacent notes may have similar pin-shift errors.',
+    title:'Swapped notes — C4↔D4 transposed',
+    simMode:'swap-C4D4',
+    symptom:'Pressing C4 produces D4 output (293.66 Hz); pressing D4 produces C4 output (261.63 Hz). Failure is deterministic and bidirectional — the two notes are fully transposed. All other keys are correct.',
     hypothesis:[
-      'Wire plugged one header pin offset — C4 switch routed to D4 FPGA input',
-      'Constraint file (.xdc) pin assignment swapped between C4 and D4',
-      'Two wires crossed during soldering — C4 and D4 inputs transposed',
+      'Two jumper wires crossed — C4 and D4 switch wires physically swapped at the FPGA IO header',
+      'Constraint file (.xdc) pin assignment swapped between C4 and D4 inputs',
+      'Switch footprints mislabeled — C4 and D4 switches physically installed in each other\'s positions',
     ],
-    test:'Oscilloscope on PWM output pin. Measure period while pressing C4. Compare: C4 expected 3.82 ms (261.63 Hz), D4 expected 3.41 ms (293.66 Hz). Then multimeter continuity from switch to each IO pin.',
+    test:'Oscilloscope on PWM output pin. Press C4: expect 3.82 ms (261.63 Hz), measure 3.41 ms (293.66 Hz). Press D4: expect 3.41 ms, measure 3.82 ms. Multimeter continuity: trace C4 switch — confirm it routes to D4 IO pin, and vice versa.',
     mm:[
-      {label:'C4 switch → IO',val:'pin +1 offset',cls:'bad'},
-      {label:'Correct C4 pin',val:'open — no conn.',cls:'bad'},
-      {label:'D4 pin',val:'continuity ok',cls:'warn'},
+      {label:'C4 switch → IO',val:'routes to D4 pin',cls:'bad'},
+      {label:'D4 switch → IO',val:'routes to C4 pin',cls:'bad'},
+      {label:'.xdc mapping',val:'correct — SW only',cls:'warn'},
     ],
-    oscType:'wrong-freq', oscLabel:'-- period = 3.41 ms → D4 freq, not C4',
-    cause:'Wire plugged into header one position off. VHDL logic and Freq_Cnt are both correct — the hardware mapping is wrong. C4 switch physically drives D4 input.',
-    fix:'Re-seat wire to correct IO pin per .xdc constraint file. Cross-check all 8 switch-to-pin mappings. Verify each note with oscilloscope period measurement before final assembly.',
+    oscType:'swap-freq', oscLabel:'-- C4 pressed: 3.41 ms (D4) · D4 pressed: 3.82 ms (C4)',
+    cause:'C4 and D4 jumper wires swapped at the FPGA IO header. VHDL logic and .xdc constraints are both correct — the physical wire routing is transposed.',
+    fix:'Swap the two wires back to their correct IO pins per the .xdc constraint file. Verify C4 → 261.63 Hz and D4 → 293.66 Hz on oscilloscope. Cross-check all 8 switch-to-pin mappings before final assembly.',
   },
   {
     id:'FA-04', badge:'audio', badgeText:'Audio',
@@ -648,13 +648,19 @@ function pressKey(note) {
       statusText = `${note} → SIGNAL OK — ${NOTE_FREQS[note]} Hz`;
       el.classList.add('pressed');
     }
-  } else if (c.simMode === 'wrong-C4') {
+  } else if (c.simMode === 'swap-C4D4') {
     if (note === 'C4') {
       type = 'wrong';
-      statusText = `C4 pressed → D4 output (261.63 Hz → 293.66 Hz) — pin offset`;
+      statusText = `C4 pressed → D4 output (261.63 Hz → 293.66 Hz) — wires swapped`;
       el.classList.add('wrong');
       const d4 = document.getElementById('key-D4');
       if (d4) d4.classList.add('pressed');
+    } else if (note === 'D4') {
+      type = 'wrong';
+      statusText = `D4 pressed → C4 output (293.66 Hz → 261.63 Hz) — wires swapped`;
+      el.classList.add('wrong');
+      const c4 = document.getElementById('key-C4');
+      if (c4) c4.classList.add('pressed');
     } else {
       type = 'ok';
       statusText = `${note} → SIGNAL OK — ${NOTE_FREQS[note]} Hz`;
@@ -739,10 +745,13 @@ function drawSimWave(type, note) {
     ctx.shadowBlur = 0; ctx.strokeStyle = 'rgba(46,125,50,.4)'; ctx.setLineDash([4,5]);
     ctx.beginPath(); ctx.moveTo(0,mid); ctx.lineTo(W,mid); ctx.stroke(); ctx.setLineDash([]);
   } else if (type === 'wrong') {
+    // show actual (wrong) freq solid, expected freq dashed
+    const actualSegs = note === 'C4' ? 14 : 11; // C4 pressed → D4 freq (higher=more segs), D4 pressed → C4 freq (lower=fewer segs)
+    const expectedSegs = note === 'C4' ? 11 : 14;
     ctx.strokeStyle = '#c62828'; ctx.shadowColor = '#c62828'; ctx.shadowBlur = 3;
-    drawSq(ctx, W, mid, lo, 14); // D4 = more segs
+    drawSq(ctx, W, mid, lo, actualSegs);
     ctx.shadowBlur = 0; ctx.setLineDash([3,4]); ctx.strokeStyle = 'rgba(46,125,50,.55)';
-    drawSq(ctx, W, mid, lo, 11); // C4 reference
+    drawSq(ctx, W, mid, lo, expectedSegs);
     ctx.setLineDash([]);
   } else if (type === 'noaudio') {
     ctx.globalAlpha = 0.45; ctx.strokeStyle = '#1a7a40'; ctx.shadowBlur = 0;
@@ -800,11 +809,12 @@ function drawOsc(type) {
     ctx.beginPath(); ctx.moveTo(0,lo); ctx.lineTo(W,lo); ctx.stroke();
     ctx.shadowBlur=0; ctx.strokeStyle='rgba(46,125,50,.4)'; ctx.setLineDash([4,5]);
     ctx.beginPath(); ctx.moveTo(0,mid); ctx.lineTo(W,mid); ctx.stroke(); ctx.setLineDash([]);
-  } else if (type === 'wrong-freq') {
+  } else if (type === 'wrong-freq' || type === 'swap-freq') {
     ctx.strokeStyle='#c62828'; ctx.shadowColor='#c62828'; ctx.shadowBlur=3;
-    drawSq(ctx,W,mid,lo,15);
+    drawSq(ctx,W,mid,lo,15); // D4 freq (higher)
     ctx.shadowBlur=0; ctx.setLineDash([3,4]); ctx.strokeStyle='rgba(46,125,50,.55)';
-    drawSq(ctx,W,mid,lo,12); ctx.setLineDash([]);
+    drawSq(ctx,W,mid,lo,12); // C4 freq (lower, expected)
+    ctx.setLineDash([]);
   } else if (type === 'pwm-ok') {
     ctx.strokeStyle='#1a7a40'; ctx.shadowColor='#1a7a40'; ctx.shadowBlur=5;
     drawSq(ctx,W,mid,lo,11);
@@ -860,7 +870,7 @@ function render() {
   document.getElementById('simHint').textContent =
     caseIdx===0 ? 'random glitch ~45% →' :
     caseIdx===1 ? 'try F4 key →' :
-    caseIdx===2 ? 'try C4 key →' :
+    caseIdx===2 ? 'try C4 and D4 →' :
     caseIdx===3 ? 'press any key →' :
     'adjust gain, then press →';
 
