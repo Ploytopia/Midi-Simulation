@@ -1,1110 +1,914 @@
 <!DOCTYPE html>
-<html lang="th">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>MIDI Keyboard — FPGA Simulation</title>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans+Thai:wght@300;400;500;600&display=swap" rel="stylesheet">
+<title>Failure Analysis Report · MIDI FPGA Keyboard</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
-  :root {
-    --bg:       #f5f4f0;
-    --bg2:      #ffffff;
-    --bg3:      #f0eeea;
-    --border:   #d8d5ce;
-    --border2:  #e8e5df;
-    --text:     #1a1917;
-    --text2:    #4a4845;
-    --muted:    #9a9490;
-    --shadow:   rgba(0,0,0,0.08);
+:root {
+  --bg:      #f5f4f0;
+  --bg2:     #ffffff;
+  --bg3:     #f0eeea;
+  --bg4:     #fafaf9;
+  --border:  #d8d5ce;
+  --border2: #e8e5df;
+  --text:    #1a1917;
+  --text2:   #4a4845;
+  --muted:   #9a9490;
+  --shadow:  rgba(0,0,0,0.07);
+  --orange:  #e67c00;
+  --orange-b:#fff4e5;
+  --green:   #2e7d32;
+  --green-b: #f0f7f0;
+  --red:     #c62828;
+  --red-b:   #fdf2f2;
+  --blue:    #0277bd;
+  --blue-b:  #f0f5fb;
+  --mono: 'IBM Plex Mono', monospace;
+  --sans: 'IBM Plex Sans', sans-serif;
+  --r: 10px; --rsm: 6px;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: var(--bg); color: var(--text);
+  font-family: var(--sans); min-height: 100vh; overflow-x: hidden;
+}
+body::before {
+  content: ''; position: fixed; inset: 0;
+  background-image:
+    linear-gradient(var(--border2) 1px, transparent 1px),
+    linear-gradient(90deg, var(--border2) 1px, transparent 1px);
+  background-size: 40px 40px; pointer-events: none; z-index: 0; opacity: 0.55;
+}
 
-    /* Note colors — vivid, distinct */
-    --c4:  #e53935;
-    --d4:  #e67c00;
-    --e4:  #c2a800;
-    --f4:  #2e7d32;
-    --g4:  #0277bd;
-    --a4:  #6a1b9a;
-    --b4:  #c2185b;
-    --c5:  #00838f;
+/* ── Nav ── */
+.nav {
+  position: sticky; top: 0; z-index: 100;
+  background: rgba(245,244,240,.94); backdrop-filter: blur(10px);
+  border-bottom: 1.5px solid var(--border);
+  padding: 0 28px; height: 46px;
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+}
+.nav-l { display: flex; align-items: center; gap: 12px; }
+.nav-badge {
+  background: var(--text); color: #fff;
+  font-family: var(--mono); font-size: 9px;
+  padding: 3px 9px; border-radius: 2px;
+  letter-spacing: 2px; text-transform: uppercase;
+}
+.nav-title { font-family: var(--mono); font-size: 12px; font-weight: 600; letter-spacing: -.3px; }
+.nav-div   { width: 1px; height: 15px; background: var(--border); }
+.nav-sub   { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.nav-r     { font-family: var(--mono); font-size: 10px; color: var(--muted); }
 
-    --sum: #1a1917;
+/* ── Container ── */
+.wrap {
+  max-width: 900px; margin: 0 auto;
+  padding: 28px 24px 60px; position: relative; z-index: 1;
+}
 
-    --mono: 'IBM Plex Mono', monospace;
-    --thai: 'IBM Plex Sans Thai', sans-serif;
-  }
+/* ── Page Header ── */
+.page-hd {
+  background: var(--bg2); border: 1.5px solid var(--border);
+  border-radius: var(--r); padding: 22px 26px 20px;
+  margin-bottom: 16px; box-shadow: 0 2px 10px var(--shadow);
+}
+.ph-top {
+  display: flex; align-items: flex-start;
+  justify-content: space-between; gap: 20px; flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+.ph-eyebrow {
+  display: inline-block; background: var(--text); color: #fff;
+  font-family: var(--mono); font-size: 9px; padding: 3px 10px;
+  border-radius: 2px; letter-spacing: 2px; text-transform: uppercase;
+  margin-bottom: 9px;
+}
+.ph-h1 {
+  font-family: var(--mono); font-size: clamp(20px, 3vw, 32px);
+  font-weight: 700; letter-spacing: -1.2px; line-height: 1.05;
+}
+.ph-h1 em { font-style: normal; color: var(--orange); }
+.ph-sub { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-top: 7px; }
+.ph-stats {
+  background: var(--bg3); border: 1.5px solid var(--border2);
+  border-radius: var(--rsm); padding: 12px 16px;
+  font-family: var(--mono); font-size: 11px; min-width: 180px;
+}
+.stat-row { display: flex; justify-content: space-between; gap: 18px; margin-bottom: 5px; }
+.stat-row:last-child { margin-bottom: 0; }
+.s-k { color: var(--muted); }
+.s-v { font-weight: 600; }
+.s-v.ok { color: var(--green); }
 
-  * { box-sizing: border-box; margin: 0; padding: 0; }
+/* Case Pills */
+.pills-row { display: flex; gap: 7px; flex-wrap: wrap; }
+.case-pill {
+  font-family: var(--mono); font-size: 11px; font-weight: 600;
+  letter-spacing: 0.4px; padding: 6px 16px;
+  border-radius: 4px; border: 1.5px solid var(--border);
+  background: var(--bg3); color: var(--text2);
+  cursor: pointer; transition: all .12s; box-shadow: 0 1px 3px var(--shadow);
+}
+.case-pill:hover { border-color: var(--orange); color: var(--orange); background: var(--orange-b); }
+.case-pill.active { background: var(--text); border-color: var(--text); color: #fff; box-shadow: 0 2px 8px rgba(0,0,0,.2); }
+.pill-label {
+  font-family: var(--mono); font-size: 10px; color: var(--muted);
+  letter-spacing: 0.5px; text-transform: uppercase; align-self: center;
+}
 
-  body {
-    background: var(--bg);
-    color: var(--text);
-    font-family: var(--thai);
-    min-height: 100vh;
-    overflow-x: hidden;
-  }
+/* ── Main Card ── */
+.card {
+  background: var(--bg2); border: 1.5px solid var(--border);
+  border-radius: var(--r); box-shadow: 0 2px 12px var(--shadow); overflow: hidden;
+}
 
-  /* Subtle grid */
-  body::before {
-    content: '';
-    position: fixed; inset: 0;
-    background-image:
-      linear-gradient(var(--border2) 1px, transparent 1px),
-      linear-gradient(90deg, var(--border2) 1px, transparent 1px);
-    background-size: 40px 40px;
-    pointer-events: none;
-    z-index: 0;
-    opacity: 0.6;
-  }
+/* Card Head */
+.card-hd {
+  padding: 18px 24px; border-bottom: 1.5px solid var(--border2);
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 16px;
+}
+.fa-id { font-family: var(--mono); font-size: 9.5px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--muted); margin-bottom: 5px; }
+.fa-title { font-family: var(--mono); font-size: 15px; font-weight: 700; letter-spacing: -.4px; }
+.badge { font-family: var(--mono); font-size: 9.5px; letter-spacing: 1px; text-transform: uppercase; padding: 4px 11px; border-radius: 2px; white-space: nowrap; font-weight: 600; }
+.badge.hw     { background: var(--orange-b); color: var(--orange); border: 1.5px solid rgba(230,124,0,.3); }
+.badge.wiring { background: var(--blue-b);   color: var(--blue);   border: 1.5px solid rgba(2,119,189,.3); }
+.badge.audio  { background: var(--green-b);  color: var(--green);  border: 1.5px solid rgba(46,125,50,.3); }
 
-  .container {
-    max-width: 1160px;
-    margin: 0 auto;
-    padding: 32px 24px 48px;
-    position: relative;
-    z-index: 1;
-  }
+/* Step Tabs */
+.step-tabs { display: flex; border-bottom: 1.5px solid var(--border2); background: var(--bg3); }
+.step-tab {
+  flex: 1; padding: 11px 4px; text-align: center;
+  font-family: var(--mono); font-size: 9.5px; letter-spacing: 1px; text-transform: uppercase;
+  color: var(--muted); border-bottom: 2px solid transparent; transition: all .13s;
+}
+.step-tab.active { color: var(--orange); border-bottom-color: var(--orange); background: var(--bg2); }
+.step-tab.done   { color: var(--green); }
 
-  /* ===== HEADER ===== */
-  .header {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    margin-bottom: 28px;
-    gap: 16px;
-    flex-wrap: wrap;
-  }
-  .badge {
-    display: inline-block;
-    background: var(--text);
-    color: #fff;
-    font-family: var(--mono);
-    font-size: 10px;
-    padding: 3px 10px;
-    border-radius: 2px;
-    letter-spacing: 2px;
-    text-transform: uppercase;
-    margin-bottom: 10px;
-  }
-  h1 {
-    font-family: var(--mono);
-    font-size: clamp(22px, 3.5vw, 38px);
-    font-weight: 700;
-    color: var(--text);
-    line-height: 1.0;
-    letter-spacing: -1.5px;
-  }
-  h1 em { font-style: normal; color: var(--c4); }
-  .subtitle {
-    font-size: 12px;
-    color: var(--muted);
-    margin-top: 8px;
-    font-family: var(--mono);
-    letter-spacing: 0.5px;
-  }
+/* Card Body */
+.card-body { padding: 24px; min-height: 280px; }
+.sec-label {
+  font-family: var(--mono); font-size: 9.5px; letter-spacing: 2.5px;
+  text-transform: uppercase; color: var(--muted); margin-bottom: 14px;
+  display: flex; align-items: center; gap: 10px;
+}
+.sec-label::after { content: ''; flex: 1; height: 1px; background: var(--border2); }
 
-  .status-bar {
-    background: var(--bg2);
-    border: 1.5px solid var(--border);
-    border-radius: 10px;
-    padding: 14px 18px;
-    font-family: var(--mono);
-    font-size: 11.5px;
-    min-width: 210px;
-    box-shadow: 0 2px 8px var(--shadow);
-  }
-  .status-row { display: flex; justify-content: space-between; gap: 20px; margin-bottom: 6px; }
-  .status-row:last-child { margin-bottom: 0; }
-  .status-label { color: var(--muted); }
-  .status-val { color: var(--text); font-weight: 600; }
+.section { display: none; }
+.section.visible { display: block; animation: fi .18s ease; }
+@keyframes fi { from { opacity:0; transform: translateY(4px); } to { opacity:1; transform: translateY(0); } }
 
-  /* ===== SECTION SHELL ===== */
-  .card {
-    background: var(--bg2);
-    border: 1.5px solid var(--border);
-    border-radius: 12px;
-    padding: 22px 24px;
-    margin-bottom: 20px;
-    box-shadow: 0 2px 10px var(--shadow);
-  }
-  .sec-label {
-    font-family: var(--mono);
-    font-size: 10px;
-    letter-spacing: 2.5px;
-    text-transform: uppercase;
-    color: var(--muted);
-    margin-bottom: 16px;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-  .sec-label::after {
-    content: '';
-    flex: 1;
-    height: 1px;
-    background: var(--border2);
-  }
+.body-text { font-size: 13px; color: var(--text2); line-height: 1.76; margin-bottom: 14px; font-family: var(--sans); }
+code { font-family: var(--mono); font-size: 11.5px; background: var(--bg3); color: var(--orange); border: 1px solid var(--border2); border-radius: 3px; padding: 1px 6px; }
 
-  /* ===== FLOW ===== */
-  .flow-row {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    flex-wrap: wrap;
-  }
-  .flow-box {
-    background: var(--bg3);
-    border: 1.5px solid var(--border);
-    border-radius: 8px;
-    padding: 8px 14px;
-    font-family: var(--mono);
-    font-size: 11.5px;
-    color: var(--text2);
-    white-space: nowrap;
-    line-height: 1.5;
-  }
-  .flow-box.f-input  { border-color: #2e7d32; color: #2e7d32; background: rgba(46,125,50,0.06); }
-  .flow-box.f-proc   { border-color: #0277bd; color: #0277bd; background: rgba(2,119,189,0.06); }
-  .flow-box.f-out    { border-color: #e67c00; color: #e67c00; background: rgba(230,124,0,0.07); }
-  .flow-box.f-spk    { border-color: #c2185b; color: #c2185b; background: rgba(194,24,91,0.06); }
-  .flow-arrow { color: var(--muted); font-size: 16px; font-weight: 400; }
+/* Hypothesis */
+.hyp-list { list-style: none; display: flex; flex-direction: column; gap: 7px; }
+.hyp-list li {
+  display: flex; gap: 11px; align-items: flex-start;
+  font-size: 12.5px; color: var(--text2); background: var(--bg3);
+  border-radius: var(--rsm); padding: 10px 14px;
+  border: 1.5px solid var(--border2); line-height: 1.6;
+  transition: border-color .13s;
+}
+.hyp-list li:hover { border-color: var(--border); }
+.hn { font-family: var(--mono); font-size: 9px; font-weight: 700; color: var(--orange); white-space: nowrap; padding-top: 2px; }
 
-  /* ===== CONTROLS ===== */
-  .controls {
-    display: flex;
-    gap: 10px;
-    align-items: center;
-    flex-wrap: wrap;
-    margin-bottom: 18px;
-  }
-  .btn {
-    background: var(--bg2);
-    border: 1.5px solid var(--border);
-    color: var(--text2);
-    font-family: var(--mono);
-    font-size: 11.5px;
-    padding: 8px 18px;
-    border-radius: 7px;
-    cursor: pointer;
-    transition: all 0.12s;
-    letter-spacing: 0.5px;
-    box-shadow: 0 1px 3px var(--shadow);
-  }
-  .btn:hover { border-color: var(--text); color: var(--text); background: var(--bg3); }
-  .btn.primary {
-    background: var(--text);
-    border-color: var(--text);
-    color: #fff;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-  }
-  .btn.primary:hover { opacity: 0.85; }
+/* ── Instruments ── */
+.inst-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 8px; }
+@media (max-width: 520px) { .inst-grid { grid-template-columns: 1fr; } }
+.inst-box { background: var(--bg3); border: 1.5px solid var(--border2); border-radius: var(--rsm); padding: 14px; }
+.inst-head { font-family: var(--mono); font-size: 9.5px; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); margin-bottom: 11px; display: flex; align-items: center; gap: 7px; }
+.idot { width: 7px; height: 7px; border-radius: 50%; }
+.idot.mm  { background: var(--blue); }
+.idot.osc { background: var(--green); }
 
-  .speed-wrap { display: flex; align-items: center; gap: 10px; }
-  input[type=range] {
-    -webkit-appearance: none;
-    height: 3px;
-    background: var(--border);
-    border-radius: 2px;
-    width: 100px;
-    cursor: pointer;
-  }
-  input[type=range]::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    width: 14px; height: 14px;
-    background: var(--text);
-    border-radius: 50%;
-    box-shadow: 0 1px 4px rgba(0,0,0,0.2);
-  }
+/* MM rows */
+.mm-rows { display: flex; flex-direction: column; gap: 5px; }
+.mm-row {
+  display: flex; justify-content: space-between; align-items: center; gap: 8px;
+  padding: 7px 10px; border-radius: 4px;
+  border: 1.5px solid var(--border2); font-size: 11.5px;
+  transition: all .12s;
+}
+.mm-row.good { background: var(--green-b); border-color: rgba(46,125,50,.25); }
+.mm-row.bad  { background: var(--red-b);   border-color: rgba(198,40,40,.25); }
+.mm-row.warn { background: var(--orange-b); border-color: rgba(230,124,0,.25); }
+.mm-label { color: var(--text2); font-size: 12px; }
+.mm-val { font-family: var(--mono); font-size: 11px; font-weight: 600; padding: 2px 9px; border-radius: 3px; }
+.mm-val.good { color: var(--green);  background: rgba(46,125,50,.1); }
+.mm-val.bad  { color: var(--red);    background: rgba(198,40,40,.1); }
+.mm-val.warn { color: var(--orange); background: rgba(230,124,0,.1); }
 
-  /* ===== INFO CARDS ===== */
-  .info-grid {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 12px;
-    margin-bottom: 20px;
-  }
-  @media (max-width: 580px) { .info-grid { grid-template-columns: repeat(2,1fr); } }
-  .info-card {
-    background: var(--bg2);
-    border: 1.5px solid var(--border);
-    border-radius: 10px;
-    padding: 14px 16px;
-    text-align: center;
-    box-shadow: 0 1px 4px var(--shadow);
-  }
-  .info-label {
-    font-size: 9.5px;
-    color: var(--muted);
-    font-family: var(--mono);
-    margin-bottom: 6px;
-    letter-spacing: 1.5px;
-    text-transform: uppercase;
-  }
-  .info-val {
-    font-family: var(--mono);
-    font-size: 20px;
-    font-weight: 700;
-    color: var(--text);
-    line-height: 1;
-  }
-  .info-val.green { color: #2e7d32; }
-  .info-val.blue  { color: #0277bd; }
-  .info-val.orange { color: #e67c00; }
-  .info-val.purple { color: #6a1b9a; }
+/* Oscilloscope — LIGHT */
+.osc-frame {
+  background: var(--green-b); border: 1.5px solid rgba(46,125,50,.28);
+  border-radius: 5px; padding: 8px; position: relative; overflow: hidden;
+}
+.osc-frame::before {
+  content: ''; position: absolute; inset: 8px;
+  background-image:
+    linear-gradient(rgba(46,125,50,.1) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(46,125,50,.1) 1px, transparent 1px);
+  background-size: 20% 25%; pointer-events: none;
+}
+canvas.osc { width: 100%; height: 70px; display: block; position: relative; z-index: 1; }
+.osc-meta { font-family: var(--mono); font-size: 9px; color: var(--green); margin-top: 7px; text-align: center; letter-spacing: .04em; }
 
-  /* ===== PIANO ===== */
-  .piano-hint {
-    font-size: 11.5px;
-    color: var(--muted);
-    margin-bottom: 14px;
-    font-family: var(--mono);
-  }
-  .piano-keys {
-    display: flex;
-    gap: 5px;
-    justify-content: center;
-    flex-wrap: wrap;
-  }
-  .key {
-    width: 88px;
-    height: 120px;
-    background: var(--bg2);
-    border: 1.5px solid var(--border);
-    border-radius: 8px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: flex-end;
-    padding-bottom: 14px;
-    cursor: pointer;
-    user-select: none;
-    transition: all 0.08s ease;
-    position: relative;
-    overflow: hidden;
-    box-shadow: 0 2px 8px var(--shadow);
-  }
-  .key::before {
-    content: '';
-    position: absolute;
-    top: 0; left: 0; right: 0;
-    height: 4px;
-    background: var(--kcolor, var(--border));
-    transition: opacity 0.1s;
-    opacity: 0.5;
-  }
-  .key:hover {
-    border-color: var(--kcolor, var(--text));
-    background: var(--bg3);
-    transform: translateY(1px);
-    box-shadow: 0 1px 4px var(--shadow);
-  }
-  .key.pressed {
-    background: #fff;
-    border-color: var(--kcolor, var(--text));
-    transform: translateY(2px) scale(0.97);
-    box-shadow: inset 0 2px 8px rgba(0,0,0,0.08);
-  }
-  .key.pressed::before { opacity: 1; height: 5px; }
-  .key-note {
-    font-family: var(--mono);
-    font-weight: 700;
-    font-size: 15px;
-    color: var(--text);
-    transition: color 0.08s;
-  }
-  .key.pressed .key-note { color: var(--kcolor, var(--text)); }
-  .key-freq { font-family: var(--mono); font-size: 9px; color: var(--muted); margin-top: 4px; }
-  .key-hex  { font-family: var(--mono); font-size: 9px; color: var(--muted); margin-top: 2px; }
+/* RC boxes */
+.rc-box { border-radius: var(--rsm); padding: 14px 16px; margin-bottom: 10px; border: 1.5px solid; }
+.rc-box.cause { background: var(--red-b);   border-color: rgba(198,40,40,.25); }
+.rc-box.fix   { background: var(--green-b); border-color: rgba(46,125,50,.25); }
+.rc-lbl { font-family: var(--mono); font-size: 9px; letter-spacing: 2px; text-transform: uppercase; font-weight: 700; margin-bottom: 6px; }
+.rc-lbl.cause { color: var(--red); }
+.rc-lbl.fix   { color: var(--green); }
+.rc-text { font-size: 12.5px; line-height: 1.7; font-family: var(--sans); }
+.rc-text.cause { color: #4a1010; }
+.rc-text.fix   { color: #133220; }
 
-  /* Color stripe per note */
-  .key-stripe {
-    position: absolute;
-    top: 4px; left: 50%; transform: translateX(-50%);
-    width: 28px; height: 28px;
-    border-radius: 50%;
-    opacity: 0.12;
-    transition: opacity 0.1s;
-  }
-  .key.pressed .key-stripe { opacity: 0.22; }
+/* ── Card Nav ── */
+.card-nav {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 24px; border-top: 1.5px solid var(--border2);
+  background: var(--bg3); gap: 12px; flex-wrap: wrap;
+}
+.case-nav2 { display: flex; gap: 7px; }
+.btn {
+  background: var(--bg2); border: 1.5px solid var(--border); color: var(--text2);
+  font-family: var(--mono); font-size: 11px; padding: 6px 15px;
+  border-radius: var(--rsm); cursor: pointer; transition: all .12s;
+  box-shadow: 0 1px 3px var(--shadow); letter-spacing: .3px;
+}
+.btn:hover { border-color: var(--text); color: var(--text); background: var(--bg3); }
+.btn:disabled { opacity: .35; cursor: default; pointer-events: none; }
+.btn.primary { background: var(--text); border-color: var(--text); color: #fff; box-shadow: 0 2px 8px rgba(0,0,0,.18); }
+.btn.primary:hover { opacity: .82; }
+.step-nav { display: flex; gap: 7px; align-items: center; }
+.step-ctr { font-family: var(--mono); font-size: 10.5px; color: var(--muted); }
 
-  /* Note chips */
-  .active-notes {
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-    margin-bottom: 14px;
-    min-height: 30px;
-  }
-  .note-chip {
-    background: var(--bg3);
-    border: 1.5px solid var(--border);
-    border-radius: 4px;
-    padding: 3px 10px;
-    font-family: var(--mono);
-    font-size: 11px;
-    color: var(--muted);
-    transition: all 0.1s;
-  }
-  .note-chip.on {
-    border-color: var(--kcolor, var(--text));
-    color: var(--kcolor, var(--text));
-    background: var(--bg2);
-    font-weight: 600;
-  }
+/* ── Piano Simulator ── */
+.sim-wrap {
+  margin-top: 18px; background: var(--bg3);
+  border: 1.5px solid var(--border2); border-radius: var(--r); overflow: hidden;
+}
+.sim-top-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 9px 14px 8px; border-bottom: 1px solid var(--border2);
+}
+.sim-top-lbl { font-family: var(--mono); font-size: 9.5px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--muted); }
+.sim-hint { font-family: var(--mono); font-size: 9.5px; color: var(--orange); }
 
-  /* ===== WAVEFORM AREA ===== */
-  .wave-layout {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    grid-template-rows: auto auto;
-    gap: 16px;
-    margin-bottom: 20px;
-  }
-  @media (max-width: 700px) { .wave-layout { grid-template-columns: 1fr; } }
+.piano-outer { padding: 16px 0 14px; display: flex; justify-content: center; }
+.piano { position: relative; display: flex; gap: 2px; height: 86px; }
+.wk {
+  width: 38px; height: 86px; background: var(--bg2);
+  border: 1.5px solid var(--border); border-radius: 0 0 5px 5px;
+  cursor: pointer; position: relative; z-index: 1;
+  display: flex; align-items: flex-end; justify-content: center;
+  padding-bottom: 6px; font-family: var(--mono); font-size: 8.5px; color: var(--muted);
+  user-select: none; transition: all .08s; box-shadow: 0 2px 4px rgba(0,0,0,.08);
+}
+.wk:hover { background: var(--bg3); }
+.wk.pressed { background: var(--orange-b) !important; border-color: var(--orange) !important; color: var(--orange) !important; }
+.wk.dead    { background: var(--red-b) !important;    border-color: var(--red) !important;    color: var(--red) !important; }
+.wk.wrong   { background: var(--blue-b) !important;   border-color: var(--blue) !important;   color: var(--blue) !important; }
+.bk {
+  position: absolute; width: 26px; height: 54px;
+  background: var(--text); border-radius: 0 0 4px 4px; z-index: 2; top: 0;
+  cursor: default; user-select: none; box-shadow: 2px 3px 6px rgba(0,0,0,.25);
+}
 
-  .wave-card {
-    background: var(--bg2);
-    border: 1.5px solid var(--border);
-    border-radius: 12px;
-    padding: 18px 20px;
-    box-shadow: 0 2px 10px var(--shadow);
-  }
-  .wave-card.full { grid-column: 1 / -1; }
+/* Sim result */
+.sim-result { padding: 0 14px 14px; }
+.sim-status {
+  font-family: var(--mono); font-size: 11.5px; font-weight: 600;
+  padding: 8px 12px; border-radius: 4px; margin-bottom: 10px;
+  border: 1.5px solid; letter-spacing: .02em;
+}
+.sim-status.idle    { color: var(--muted); background: var(--bg2); border-color: var(--border2); }
+.sim-status.ok      { color: var(--green);  background: var(--green-b); border-color: rgba(46,125,50,.3); }
+.sim-status.glitch  { color: var(--red);    background: var(--red-b);   border-color: rgba(198,40,40,.3); }
+.sim-status.dead    { color: var(--red);    background: var(--red-b);   border-color: rgba(198,40,40,.3); }
+.sim-status.wrong   { color: var(--blue);   background: var(--blue-b);  border-color: rgba(2,119,189,.3); }
+.sim-status.noaudio { color: var(--orange); background: var(--orange-b); border-color: rgba(230,124,0,.3); }
+.sim-status.inaud   { color: var(--muted);  background: var(--bg2);     border-color: var(--border2); }
 
-  .wave-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 12px;
-  }
-  .wave-title-text {
-    font-family: var(--mono);
-    font-size: 10px;
-    letter-spacing: 2px;
-    text-transform: uppercase;
-    color: var(--muted);
-  }
-  .wave-badge {
-    font-family: var(--mono);
-    font-size: 11px;
-    color: var(--text2);
-    background: var(--bg3);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    padding: 2px 8px;
-  }
-  canvas {
-    width: 100%;
-    display: block;
-    border-radius: 4px;
-  }
+/* Sim oscilloscope (light) */
+.sim-osc-frame {
+  background: var(--green-b); border: 1.5px solid rgba(46,125,50,.25);
+  border-radius: 5px; padding: 8px; position: relative; overflow: hidden;
+}
+.sim-osc-frame::before {
+  content: ''; position: absolute; inset: 8px;
+  background-image:
+    linear-gradient(rgba(46,125,50,.1) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(46,125,50,.1) 1px, transparent 1px);
+  background-size: 12.5% 25%; pointer-events: none;
+}
+canvas#simWave { width: 100%; height: 76px; display: block; position: relative; z-index: 1; }
 
-  /* ===== FORMULA ===== */
-  .formula-bar {
-    background: var(--bg2);
-    border: 1.5px solid var(--border);
-    border-radius: 10px;
-    padding: 14px 20px;
-    margin-bottom: 20px;
-    font-family: var(--mono);
-    font-size: 12.5px;
-    box-shadow: 0 2px 8px var(--shadow);
-  }
-  .formula-lbl { color: var(--muted); font-size: 9.5px; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 8px; }
-  .formula-text { color: var(--text2); }
-  .formula-text .hi { color: var(--c4); font-weight: 700; }
+/* Gain slider (FA-05) */
+.gain-row {
+  display: flex; align-items: center; gap: 10px;
+  margin-top: 10px; padding: 10px 12px;
+  background: var(--bg2); border: 1.5px solid var(--border2); border-radius: var(--rsm);
+}
+.gain-lbl { font-family: var(--mono); font-size: 10.5px; color: var(--text2); white-space: nowrap; }
+input[type=range] {
+  -webkit-appearance: none; flex: 1; height: 3px;
+  background: var(--border); border-radius: 2px; cursor: pointer;
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 14px; height: 14px;
+  background: var(--text); border-radius: 50%; box-shadow: 0 1px 4px rgba(0,0,0,.2);
+}
+.gain-pct { font-family: var(--mono); font-size: 11px; font-weight: 600; color: var(--text); min-width: 36px; text-align: right; }
+.gain-chip {
+  font-family: var(--mono); font-size: 9.5px; font-weight: 700;
+  padding: 3px 9px; border-radius: 3px; letter-spacing: .5px; white-space: nowrap;
+}
+.gain-chip.on  { background: var(--green-b); color: var(--green); border: 1px solid rgba(46,125,50,.3); }
+.gain-chip.off { background: var(--red-b);   color: var(--red);   border: 1px solid rgba(198,40,40,.3); }
 
-  /* ===== PWM ===== */
-  .pwm-card {
-    background: var(--bg2);
-    border: 1.5px solid var(--border);
-    border-radius: 12px;
-    padding: 18px 20px;
-    margin-bottom: 20px;
-    box-shadow: 0 2px 10px var(--shadow);
-  }
-
-  /* ===== LEGEND ===== */
-  .legend {
-    display: flex;
-    gap: 14px;
-    flex-wrap: wrap;
-    margin-top: 10px;
-  }
-  .legend-item {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-family: var(--mono);
-    font-size: 11px;
-    color: var(--text2);
-  }
-  .legend-dot {
-    width: 10px; height: 10px;
-    border-radius: 50%;
-    flex-shrink: 0;
-  }
-
-  /* ===== FOOTER ===== */
-  .footer-note {
-    text-align: center;
-    font-family: var(--mono);
-    font-size: 11px;
-    color: var(--muted);
-    padding-top: 16px;
-    border-top: 1.5px solid var(--border);
-    letter-spacing: 0.5px;
-  }
-
-  /* ===== CHORD BADGE ===== */
-  .chord-badge {
-    display: none;
-    background: var(--text);
-    color: #fff;
-    font-family: var(--mono);
-    font-size: 10.5px;
-    padding: 3px 10px;
-    border-radius: 4px;
-    margin-left: 8px;
-    font-weight: 600;
-    letter-spacing: 1px;
-  }
-  .chord-badge.visible { display: inline-block; }
-
-  @keyframes pulse-border {
-    0%, 100% { box-shadow: 0 2px 10px var(--shadow); }
-    50% { box-shadow: 0 2px 20px rgba(26,25,23,0.15), 0 0 0 2px rgba(26,25,23,0.08); }
-  }
-  .wave-card.full.active { animation: pulse-border 1.6s ease-in-out infinite; }
+/* ── Footer ── */
+.page-ft {
+  margin-top: 20px; display: flex; align-items: center; gap: 8px;
+  font-family: var(--mono); font-size: 10px; color: var(--muted);
+}
+.ft-dot { color: var(--border); }
 </style>
 </head>
 <body>
-<div class="container">
 
-  <!-- Header -->
-  <div class="header">
-    <div>
-      <div class="badge">CPE 222 · KMUTT × MIDI</div>
-      <h1>MIDI <em>KEYBOARD</em><br>FPGA SIMULATOR</h1>
-      <div class="subtitle">Basys3 · PWM Sine Wave Generator · C4–C5</div>
-    </div>
-    <div class="status-bar">
-      <div class="status-row"><span class="status-label">CLK</span><span class="status-val">100 MHz</span></div>
-      <div class="status-row"><span class="status-label">SAMPLES</span><span class="status-val">64 / note</span></div>
-      <div class="status-row"><span class="status-label">MAX POLY</span><span class="status-val">4 notes</span></div>
-      <div class="status-row"><span class="status-label">OUTPUT</span><span class="status-val">PWM → SPEAKER</span></div>
-    </div>
+<!-- Nav -->
+<nav class="nav">
+  <div class="nav-l">
+    <span class="nav-badge">FA Report</span>
+    <span class="nav-title">MIDI FPGA Keyboard</span>
+    <div class="nav-div"></div>
+    <span class="nav-sub">hardware_debug.vhd</span>
   </div>
+  <div class="nav-r">5 cases · 4 steps each</div>
+</nav>
 
-  <!-- Flow -->
-  <div class="card">
-    <div class="sec-label">System Data Flow</div>
-    <div class="flow-row">
-      <div class="flow-box f-input">🎹 Button Input<br><span style="font-size:10px;color:var(--muted)">9 switches</span></div>
-      <div class="flow-arrow">→</div>
-      <div class="flow-box f-proc">Wave Generator<br><span style="font-size:10px;color:var(--muted)">Freq_Cnt + LUT</span></div>
-      <div class="flow-arrow">→</div>
-      <div class="flow-box f-proc">Input Limiter<br><span style="font-size:10px;color:var(--muted)">cntC5 check</span></div>
-      <div class="flow-arrow">→</div>
-      <div class="flow-box f-proc">Amplitude Adder<br><span style="font-size:10px;color:var(--muted)">Wave0+1+2+3</span></div>
-      <div class="flow-arrow">→</div>
-      <div class="flow-box f-proc">2's Complement<br><span style="font-size:10px;color:var(--muted)">→ positive</span></div>
-      <div class="flow-arrow">→</div>
-      <div class="flow-box f-out">PWM Signal<br><span style="font-size:10px;color:var(--muted)">ping_length</span></div>
-      <div class="flow-arrow">→</div>
-      <div class="flow-box f-spk">🔊 Speaker</div>
-    </div>
-  </div>
+<div class="wrap">
 
-  <!-- Controls -->
-  <div class="controls">
-    <button class="btn primary" id="btnAnimate" onclick="toggleAnim()">▶ PLAY ANIMATION</button>
-    <button class="btn" onclick="clearAll()">✕ CLEAR ALL</button>
-    <div class="speed-wrap">
-      <span style="font-family:var(--mono);font-size:11px;color:var(--muted)">SPEED</span>
-      <input type="range" id="speedRange" min="0.3" max="3" step="0.1" value="1">
-      <span id="speedLabel" style="font-family:var(--mono);font-size:11px;color:var(--text2);min-width:28px">1.0x</span>
-    </div>
-    <span style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-left:auto">คลิกปุ่มเพื่อเล่นโน้ต · กดพร้อมกันได้สูงสุด 4 ตัว</span>
-  </div>
-
-  <!-- Info cards -->
-  <div class="info-grid">
-    <div class="info-card">
-      <div class="info-label">Notes Active</div>
-      <div class="info-val green" id="infoNotes">0 / 4</div>
-    </div>
-    <div class="info-card">
-      <div class="info-label">Amplitude Sum</div>
-      <div class="info-val blue" id="infoAmp">0</div>
-    </div>
-    <div class="info-card">
-      <div class="info-label">PWM Duty</div>
-      <div class="info-val orange" id="infoDuty">0%</div>
-    </div>
-    <div class="info-card">
-      <div class="info-label">Sample (i)</div>
-      <div class="info-val purple" id="infoI">0/63</div>
-    </div>
-  </div>
-
-  <!-- Piano -->
-  <div class="card">
-    <div class="sec-label">Piano Keys — กดเพื่อเล่นโน้ต</div>
-    <div class="active-notes" id="activeNotes"></div>
-    <div class="piano-keys" id="pianoKeys"></div>
-  </div>
-
-  <!-- Waveforms -->
-  <div class="wave-layout">
-    <!-- Individual waves -->
-    <div class="wave-card" id="waveIndCard">
-      <div class="wave-header">
-        <div class="wave-title-text">Individual Sine Waves</div>
-        <div class="wave-badge" id="waveIndLabel">—</div>
+  <!-- ── Page Header ── -->
+  <div class="page-hd">
+    <div class="ph-top">
+      <div>
+        <div class="ph-eyebrow">Computer Engineering · KMUTT</div>
+        <h1 class="ph-h1">Failure Analysis <em>Report</em></h1>
+        <div class="ph-sub">-- MIDI FPGA Keyboard · Hardware Debug Walkthrough</div>
       </div>
-      <canvas id="cvInd" height="160"></canvas>
-      <div class="legend" id="waveLegend"></div>
-    </div>
-
-    <!-- Frequency spectrum hint -->
-    <div class="wave-card" id="waveSpecCard">
-      <div class="wave-header">
-        <div class="wave-title-text">Frequency Overview</div>
-        <div class="wave-badge" id="waveFreqLabel">C4–C5 range</div>
+      <div class="ph-stats">
+        <div class="stat-row"><span class="s-k">project</span><span class="s-v">MIDI_FPGA</span></div>
+        <div class="stat-row"><span class="s-k">platform</span><span class="s-v">Basys3</span></div>
+        <div class="stat-row"><span class="s-k">language</span><span class="s-v">VHDL / C</span></div>
+        <div class="stat-row"><span class="s-k">status</span><span class="s-v ok">all resolved ✓</span></div>
       </div>
-      <canvas id="cvFreq" height="160"></canvas>
+    </div>
+    <!-- Case Pills -->
+    <div class="pills-row">
+      <span class="pill-label">Jump to case →</span>
+      <div id="casePills" style="display:flex;gap:7px;flex-wrap:wrap;"></div>
+    </div>
+  </div>
+
+  <!-- ── Main Card ── -->
+  <div class="card">
+
+    <!-- Card Head -->
+    <div class="card-hd">
+      <div>
+        <div class="fa-id" id="faId"></div>
+        <div class="fa-title" id="faTitle"></div>
+      </div>
+      <span class="badge" id="faBadge"></span>
     </div>
 
-    <!-- Sum wave — full width -->
-    <div class="wave-card full" id="waveSumCard">
-      <div class="wave-header">
-        <div class="wave-title-text">Wave Sum — Polyphony / Amplitude Adder</div>
-        <div style="display:flex;align-items:center;gap:8px">
-          <span class="chord-badge" id="chordBadge"></span>
-          <div class="wave-badge" id="waveSumLabel">0 notes active</div>
+    <!-- Step Tabs -->
+    <div class="step-tabs" id="stepTabs"></div>
+
+    <!-- Body -->
+    <div class="card-body">
+
+      <!-- Symptom -->
+      <div class="section" id="sec-symptom">
+        <div class="sec-label">Symptom Observed</div>
+        <p class="body-text" id="txt-symptom"></p>
+
+        <!-- Keyboard Simulator -->
+        <div class="sim-wrap">
+          <div class="sim-top-bar">
+            <span class="sim-top-lbl">// interactive simulation</span>
+            <span class="sim-hint" id="simHint">press a key →</span>
+          </div>
+          <div class="piano-outer">
+            <div class="piano" id="piano">
+              <!-- white keys -->
+              <div class="wk" id="key-C4" data-note="C4" onmousedown="pressKey('C4')">C4</div>
+              <div class="wk" id="key-D4" data-note="D4" onmousedown="pressKey('D4')">D4</div>
+              <div class="wk" id="key-E4" data-note="E4" onmousedown="pressKey('E4')">E4</div>
+              <div class="wk" id="key-F4" data-note="F4" onmousedown="pressKey('F4')">F4</div>
+              <div class="wk" id="key-G4" data-note="G4" onmousedown="pressKey('G4')">G4</div>
+              <div class="wk" id="key-A4" data-note="A4" onmousedown="pressKey('A4')">A4</div>
+              <div class="wk" id="key-B4" data-note="B4" onmousedown="pressKey('B4')">B4</div>
+              <div class="wk" id="key-C5" data-note="C5" onmousedown="pressKey('C5')">C5</div>
+              <!-- black keys (decorative positioning) -->
+              <div class="bk" style="left:27px"></div>
+              <div class="bk" style="left:67px"></div>
+              <div class="bk" style="left:147px"></div>
+              <div class="bk" style="left:187px"></div>
+              <div class="bk" style="left:227px"></div>
+            </div>
+          </div>
+
+          <!-- Gain Slider (FA-05 only) -->
+          <div class="sim-result" id="simResult" style="display:none">
+            <div class="sim-status idle" id="simStatus">— press a key above —</div>
+            <div class="sim-osc-frame">
+              <canvas id="simWave"></canvas>
+            </div>
+          </div>
+
+          <div id="gainRow" style="display:none; padding:0 14px 14px;">
+            <div class="gain-row">
+              <span class="gain-lbl">🔊 Speaker Gain</span>
+              <input type="range" id="gainSlider" min="0" max="100" value="20"
+                     oninput="onGainChange()">
+              <span class="gain-pct" id="gainPct">20%</span>
+              <span class="gain-chip off" id="gainChip">INAUDIBLE</span>
+            </div>
+          </div>
         </div>
       </div>
-      <canvas id="cvSum" height="180"></canvas>
+
+      <!-- Hypothesis -->
+      <div class="section" id="sec-hypothesis">
+        <div class="sec-label">Hypothesis</div>
+        <ul class="hyp-list" id="txt-hypothesis"></ul>
+      </div>
+
+      <!-- Test -->
+      <div class="section" id="sec-test">
+        <div class="sec-label">Test Procedure — Instruments</div>
+        <p class="body-text" id="txt-test"></p>
+        <div class="inst-grid">
+          <div class="inst-box">
+            <div class="inst-head"><div class="idot mm"></div>Multimeter</div>
+            <div class="mm-rows" id="mm-rows"></div>
+          </div>
+          <div class="inst-box">
+            <div class="inst-head"><div class="idot osc"></div>Oscilloscope</div>
+            <div class="osc-frame">
+              <canvas class="osc" id="oscCanvas"></canvas>
+            </div>
+            <div class="osc-meta" id="oscLabel"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Result -->
+      <div class="section" id="sec-result">
+        <div class="sec-label">Root Cause &amp; Corrective Action</div>
+        <div class="rc-box cause">
+          <div class="rc-lbl cause">// root_cause</div>
+          <div class="rc-text cause" id="txt-cause"></div>
+        </div>
+        <div class="rc-box fix">
+          <div class="rc-lbl fix">// corrective_action</div>
+          <div class="rc-text fix" id="txt-fix"></div>
+        </div>
+      </div>
+
+    </div><!-- /card-body -->
+
+    <!-- Nav Footer -->
+    <div class="card-nav">
+      <div class="case-nav2">
+        <button class="btn" onclick="prevCase()">← prev</button>
+        <button class="btn" onclick="nextCase()">next →</button>
+      </div>
+      <div class="step-nav">
+        <span class="step-ctr" id="stepCtr"></span>
+        <button class="btn" id="btnPrev" onclick="prevStep()">← back</button>
+        <button class="btn primary" id="btnNext" onclick="nextStep()">next →</button>
+      </div>
     </div>
+
+  </div><!-- /card -->
+
+  <div class="page-ft">
+    <span>FPGA · VHDL</span><span class="ft-dot">·</span>
+    <span>Hardware Debug</span><span class="ft-dot">·</span>
+    <span>MIDI Keyboard</span><span class="ft-dot">·</span>
+    <span>KMUTT · Computer Engineering</span>
   </div>
 
-  <!-- Formula -->
-  <div class="formula-bar">
-    <div class="formula-lbl">Freq_Cnt Formula</div>
-    <div class="formula-text" id="formulaDisplay">
-      Freq_Cnt = 100,000,000 ÷ (freq × 64) &nbsp;|&nbsp;
-      <span class="hi">กดโน้ตเพื่อดูค่า</span>
-    </div>
-  </div>
-
-  <!-- PWM -->
-  <div class="pwm-card">
-    <div class="sec-label">PWM Signal Output — Digital → Analog (Sine Approximation)</div>
-    <canvas id="cvPWM" height="80"></canvas>
-  </div>
-
-  <div class="footer-note">
-    KMUTT × MIDI (มีดี) · CPE 222 Digital Electronics and Logic Design · Basys3 FPGA Simulation
-  </div>
-</div>
+</div><!-- /wrap -->
 
 <script>
-// ===== NOTE DATA =====
-const NOTES = [
-  { name:'C4', freq:261.63, freqCnt:5973, hexCnt:'0x1755', cssVar:'--c4', color:'#e53935' },
-  { name:'D4', freq:293.66, freqCnt:5321, hexCnt:'0x14C9', cssVar:'--d4', color:'#e67c00' },
-  { name:'E4', freq:329.63, freqCnt:4741, hexCnt:'0x1285', cssVar:'--e4', color:'#c2a800' },
-  { name:'F4', freq:349.23, freqCnt:4475, hexCnt:'0x117B', cssVar:'--f4', color:'#2e7d32' },
-  { name:'G4', freq:392.00, freqCnt:3986, hexCnt:'0x0F92', cssVar:'--g4', color:'#0277bd' },
-  { name:'A4', freq:440.00, freqCnt:3552, hexCnt:'0x0DE0', cssVar:'--a4', color:'#6a1b9a' },
-  { name:'B4', freq:493.88, freqCnt:3164, hexCnt:'0x0C5C', cssVar:'--b4', color:'#c2185b' },
-  { name:'C5', freq:523.25, freqCnt:2987, hexCnt:'0x0BAB', cssVar:'--c5', color:'#00838f' },
+const STEPS = ['symptom','hypothesis','test','result'];
+const SLABELS = ['1 · Symptom','2 · Hypothesis','3 · Test','4 · Result'];
+
+const CASES = [
+  {
+    id:'FA-01', badge:'hw', badgeText:'Hardware',
+    title:'Intermittent button response',
+    simMode:'glitch',
+    symptom:'Switch registers input on some presses but fails randomly on others. No consistent pattern — the same button works one press, fails the next. No correlation with press duration or force.',
+    hypothesis:[
+      'Cold solder joint on switch pin — mechanical flex temporarily restores contact then loses it',
+      'Micro-crack in PCB trace near switch footprint, intermittently opening the path',
+      'Oxidised contact surface causing variable resistance under the joint',
+    ],
+    test:'Probe FPGA input pin with oscilloscope during repeated presses. Switch to multimeter continuity mode across switch pins — listen for beep dropout mid-press. Wiggle the board to reproduce.',
+    mm:[
+      {label:'Press (held)',val:'BEEP → drops',cls:'bad'},
+      {label:'Board flex',val:'intermittent',cls:'bad'},
+      {label:'Resistance',val:'0Ω → open',cls:'bad'},
+    ],
+    oscType:'glitch', oscLabel:'-- signal drops mid-press · not a software issue',
+    cause:'Cold solder joint — insufficient solder flow at switch pin base. Electrical contact exists only under direct mechanical stress; flexing the board breaks it.',
+    fix:'Reflow solder joint with flux. Verify continuity holds through 10 consecutive presses and board flex. Confirm stable logic-level signal on oscilloscope with no glitch dropout.',
+  },
+  {
+    id:'FA-02', badge:'hw', badgeText:'Hardware',
+    title:'No signal on button press',
+    simMode:'dead-F4',
+    symptom:'Button pressed fully — no FPGA response at all. No LED indicator change, no note output, no wave on oscilloscope. Unlike FA-01 the failure is 100% consistent — F4 switch never works.',
+    hypothesis:[
+      'Open circuit — solder joint completely missed during assembly, leaving pin unconnected',
+      'Solder bridge to adjacent GND pin, pulling the input permanently low',
+      'Wire terminated at wrong IO pin — physically not reaching the FPGA input',
+    ],
+    test:'Multimeter voltage mode: probe FPGA IO pin. Expect 3.3V at rest (pull-up active), 0V when pressed. Then continuity check from switch to FPGA IO header pin.',
+    mm:[
+      {label:'Idle voltage',val:'0V (exp 3.3V)',cls:'bad'},
+      {label:'Pressed',val:'0V (no change)',cls:'bad'},
+      {label:'Continuity',val:'open — no beep',cls:'bad'},
+    ],
+    oscType:'flat', oscLabel:'-- flat line · no signal reaching FPGA input',
+    cause:'Complete open circuit. Pull-up resistor not active because IO pin is floating. Solder joint was not formed — pin never made contact with pad.',
+    fix:'Inspect joint under magnification. Re-solder with proper solder flow. Confirm 3.3V at rest, clean LOW transition on press. Verify across 10 presses before sign-off.',
+  },
+  {
+    id:'FA-03', badge:'wiring', badgeText:'Wiring',
+    title:'Wrong note — C4 press plays D4',
+    simMode:'wrong-C4',
+    symptom:'Pressing the switch physically labeled C4 consistently produces D4 frequency output. Failure is deterministic — always wrong, never correct. Adjacent notes may have similar pin-shift errors.',
+    hypothesis:[
+      'Wire plugged one header pin offset — C4 switch routed to D4 FPGA input',
+      'Constraint file (.xdc) pin assignment swapped between C4 and D4',
+      'Two wires crossed during soldering — C4 and D4 inputs transposed',
+    ],
+    test:'Oscilloscope on PWM output pin. Measure period while pressing C4. Compare: C4 expected 3.82 ms (261.63 Hz), D4 expected 3.41 ms (293.66 Hz). Then multimeter continuity from switch to each IO pin.',
+    mm:[
+      {label:'C4 switch → IO',val:'pin +1 offset',cls:'bad'},
+      {label:'Correct C4 pin',val:'open — no conn.',cls:'bad'},
+      {label:'D4 pin',val:'continuity ok',cls:'warn'},
+    ],
+    oscType:'wrong-freq', oscLabel:'-- period = 3.41 ms → D4 freq, not C4',
+    cause:'Wire plugged into header one position off. VHDL logic and Freq_Cnt are both correct — the hardware mapping is wrong. C4 switch physically drives D4 input.',
+    fix:'Re-seat wire to correct IO pin per .xdc constraint file. Cross-check all 8 switch-to-pin mappings. Verify each note with oscilloscope period measurement before final assembly.',
+  },
+  {
+    id:'FA-04', badge:'audio', badgeText:'Audio',
+    title:'Passive buzzer — no audible output',
+    simMode:'no-audio',
+    symptom:'PWM signal confirmed present and correct at FPGA output pin. Passive piezo buzzer connected directly to PWM pin and GND. No audible sound produced at any note or volume setting.',
+    hypothesis:[
+      'Passive buzzer requires external amplifier — FPGA IO cannot source sufficient current (~12 mA max)',
+      '3.3V logic swing too low to actuate piezo diaphragm to audible level',
+      'Buzzer resonant frequency outside PWM note range (passive buzzers are frequency-selective)',
+    ],
+    test:'Oscilloscope confirms clean PWM at FPGA pin. Multimeter measures voltage across buzzer terminals. If correct voltage but no sound → amplifier missing. Check buzzer datasheet for drive requirements.',
+    mm:[
+      {label:'PWM pin voltage',val:'3.3V swing',cls:'warn'},
+      {label:'Across buzzer',val:'~0.6V (low)',cls:'bad'},
+      {label:'Buzzer resist.',val:'~16Ω (ok)',cls:'good'},
+    ],
+    oscType:'pwm-ok', oscLabel:'-- PWM correct at source · problem is downstream',
+    cause:'Passive buzzer requires amplifier stage. FPGA IO sources ~12 mA max — insufficient to move the piezo element at audio levels. Signal is correct; power delivery is not.',
+    fix:'Replace passive buzzer with powered speaker (built-in amplifier). Connect via 3.5 mm jack adapter to FPGA PWM output pin. Adjust speaker gain to confirm audio across all 8 notes.',
+  },
+  {
+    id:'FA-05', badge:'audio', badgeText:'Audio',
+    title:'Speaker inaudible at default gain',
+    simMode:'gain',
+    symptom:'Powered speaker connected via 3.5 mm jack + adapter to FPGA PWM pin. No audible sound at default volume setting. After increasing gain knob, audio becomes clear and correct on all notes.',
+    hypothesis:[
+      'FPGA PWM output (~1.6V RMS) below speaker minimum gain threshold at default setting',
+      'Adapter wiring issue — tip/ring/sleeve mapping incorrect for FPGA single-ended output',
+      'Speaker in mute or standby state requiring gain threshold to activate',
+    ],
+    test:'Oscilloscope at jack adapter output — confirm PWM waveform present at speaker input. Gradually increase speaker gain while monitoring. Multimeter continuity on adapter tip/sleeve wiring.',
+    mm:[
+      {label:'Tip voltage',val:'3.3V swing',cls:'good'},
+      {label:'GND sleeve',val:'continuity ok',cls:'good'},
+      {label:'Adapter wiring',val:'correct',cls:'good'},
+    ],
+    oscType:'pwm-ok', oscLabel:'-- PWM confirmed at jack · gain was set too low',
+    cause:'Signal present and correct. Speaker minimum gain threshold not met at default setting. FPGA logic-level output amplitude is lower than typical line-level — not a failure, an impedance/gain mismatch.',
+    fix:'Set speaker gain to ~65% of max. Audio confirmed audible and correct across all 8 notes. No hardware change required. Noted in operating procedure — set gain before testing.',
+  },
 ];
 
-const SAMPLES = 512; // ← higher resolution for realistic waveforms
-const DISPLAY_CYCLES = 2; // show 2 full cycles
-const AMP_MAX = 511;
+let caseIdx = 0, stepIdx = 0;
+let lastPressedNote = null;
 
-// Precompute LUT with multiple cycles shown
-// Each note shows DISPLAY_CYCLES worth of its own frequency
-NOTES.forEach(n => {
-  n.lut = [];
-  for (let i = 0; i < SAMPLES; i++) {
-    n.lut.push(Math.round(AMP_MAX * Math.sin(2 * Math.PI * i / SAMPLES * DISPLAY_CYCLES)));
+/* ─── Piano Simulation ─── */
+const NOTE_FREQS = { C4:261.63, D4:293.66, E4:329.63, F4:349.23, G4:392, A4:440, B4:493.88, C5:523.25 };
+
+function pressKey(note) {
+  clearKeys();
+  const el = document.getElementById('key-' + note);
+  const c = CASES[caseIdx];
+  let type, statusText;
+
+  if (c.simMode === 'glitch') {
+    const glitch = Math.random() < 0.45;
+    if (glitch) {
+      type = 'glitch';
+      statusText = `${note} → GLITCH detected — contact lost mid-press`;
+      el.classList.add('pressed');
+    } else {
+      type = 'ok';
+      statusText = `${note} → SIGNAL OK — ${NOTE_FREQS[note]} Hz`;
+      el.classList.add('pressed');
+    }
+  } else if (c.simMode === 'dead-F4') {
+    if (note === 'F4') {
+      type = 'dead';
+      statusText = `F4 → NO SIGNAL — open circuit (0V on IO pin)`;
+      el.classList.add('dead');
+    } else {
+      type = 'ok';
+      statusText = `${note} → SIGNAL OK — ${NOTE_FREQS[note]} Hz`;
+      el.classList.add('pressed');
+    }
+  } else if (c.simMode === 'wrong-C4') {
+    if (note === 'C4') {
+      type = 'wrong';
+      statusText = `C4 pressed → D4 output (261.63 Hz → 293.66 Hz) — pin offset`;
+      el.classList.add('wrong');
+      const d4 = document.getElementById('key-D4');
+      if (d4) d4.classList.add('pressed');
+    } else {
+      type = 'ok';
+      statusText = `${note} → SIGNAL OK — ${NOTE_FREQS[note]} Hz`;
+      el.classList.add('pressed');
+    }
+  } else if (c.simMode === 'no-audio') {
+    type = 'noaudio';
+    statusText = `${note} → PWM present (${NOTE_FREQS[note]} Hz) · no audio — insufficient drive current`;
+    el.classList.add('pressed');
+  } else if (c.simMode === 'gain') {
+    const gain = parseInt(document.getElementById('gainSlider').value);
+    if (gain >= 50) {
+      type = 'ok';
+      statusText = `${note} → AUDIBLE at ${gain}% gain — ${NOTE_FREQS[note]} Hz`;
+    } else {
+      type = 'inaud';
+      statusText = `${note} → INAUDIBLE — gain ${gain}% < 50% threshold`;
+    }
+    el.classList.add('pressed');
   }
-  // For frequency visualization: store actual freq-proportional lut
-  n.freqLut = [];
-  const relFreq = n.freq / 261.63; // relative to C4
-  for (let i = 0; i < SAMPLES; i++) {
-    n.freqLut.push(Math.round(AMP_MAX * Math.sin(2 * Math.PI * i / SAMPLES * 2 * relFreq)));
-  }
-});
 
-const CHORDS = {
-  'C4,E4,G4': 'C MAJOR', 'C4,E4,G4,C5': 'C MAJOR+', 'D4,F4,A4': 'D MINOR',
-  'E4,G4,B4': 'E MINOR', 'F4,A4,C5': 'F MAJOR', 'G4,B4,D4': 'G MAJOR',
-  'A4,C4,E4': 'A MINOR', 'C4,D4': 'do–re', 'C4,E4': 'do–mi',
-};
+  lastPressedNote = { note, type };
+  showSimResult(type, statusText);
+  drawSimWave(type, note);
+}
 
-// ===== STATE =====
-let pressed   = new Set();
-let sampleIdx = 0;
-let animPlaying = false;
-let animId    = null;
-let lastTs    = null;
-let phase     = 0;
-
-// ===== BUILD UI =====
-function buildPiano() {
-  const wrap  = document.getElementById('pianoKeys');
-  const chips = document.getElementById('activeNotes');
-  wrap.innerHTML = chips.innerHTML = '';
-
-  NOTES.forEach(n => {
-    // Key
-    const key = document.createElement('div');
-    key.className = 'key';
-    key.id = 'key-' + n.name;
-    key.style.setProperty('--kcolor', n.color);
-    key.innerHTML = `
-      <div class="key-stripe" style="background:${n.color}"></div>
-      <div class="key-note">${n.name}</div>
-      <div class="key-freq">${n.freq} Hz</div>
-      <div class="key-hex">Cnt=${n.freqCnt}</div>`;
-    key.addEventListener('mousedown', () => toggleNote(n.name));
-    key.addEventListener('touchstart', e => { e.preventDefault(); toggleNote(n.name); });
-    wrap.appendChild(key);
-
-    // Chip
-    const chip = document.createElement('div');
-    chip.className = 'note-chip';
-    chip.id = 'chip-' + n.name;
-    chip.style.setProperty('--kcolor', n.color);
-    chip.textContent = n.name;
-    chips.appendChild(chip);
+function clearKeys() {
+  document.querySelectorAll('.wk').forEach(k => {
+    k.classList.remove('pressed','dead','wrong');
   });
 }
 
-function toggleNote(name) {
-  if (pressed.has(name)) {
-    pressed.delete(name);
-  } else {
-    if (pressed.size >= 4) pressed.delete(pressed.values().next().value);
-    pressed.add(name);
+function showSimResult(type, text) {
+  const res = document.getElementById('simResult');
+  const st  = document.getElementById('simStatus');
+  res.style.display = 'block';
+  st.className = 'sim-status ' + type;
+  st.textContent = text;
+}
+
+function onGainChange() {
+  const val = document.getElementById('gainSlider').value;
+  document.getElementById('gainPct').textContent = val + '%';
+  const chip = document.getElementById('gainChip');
+  const on = parseInt(val) >= 50;
+  chip.textContent = on ? 'AUDIBLE' : 'INAUDIBLE';
+  chip.className = 'gain-chip ' + (on ? 'on' : 'off');
+  // Re-simulate last pressed note if any
+  if (lastPressedNote) pressKey(lastPressedNote.note);
+}
+
+/* ─── Sim Waveform (light osc) ─── */
+function drawSimWave(type, note) {
+  const cv = document.getElementById('simWave');
+  const W = cv.offsetWidth || 380, H = 76;
+  cv.width = W; cv.height = H;
+  const ctx = cv.getContext('2d');
+  ctx.clearRect(0,0,W,H);
+  const mid = H * 0.28, lo = H * 0.78;
+  ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+
+  if (type === 'ok') {
+    ctx.strokeStyle = '#1a7a40'; ctx.shadowColor = '#1a7a40'; ctx.shadowBlur = 4;
+    drawSq(ctx, W, mid, lo, 11);
+  } else if (type === 'glitch') {
+    ctx.strokeStyle = '#1a7a40'; ctx.shadowColor = '#1a7a40'; ctx.shadowBlur = 3;
+    const sw = W/11;
+    ctx.beginPath();
+    for (let i=0;i<11;i++) {
+      const x=i*sw; if(i===0) ctx.moveTo(x,mid);
+      if (i===7) { ctx.lineTo(x,mid); ctx.lineTo(x,lo); ctx.lineTo(x+sw*0.18,lo); ctx.lineTo(x+sw*0.18,mid); ctx.lineTo(x+sw,mid); }
+      else { ctx.lineTo(x+sw*0.5,mid); ctx.lineTo(x+sw*0.5,lo); ctx.lineTo(x+sw,lo); if(i<10) ctx.lineTo(x+sw,mid); }
+    }
+    ctx.stroke();
+    // Red glitch mark
+    ctx.strokeStyle = '#c62828'; ctx.shadowColor = '#c62828'; ctx.lineWidth = 2;
+    const gx = 7*sw;
+    ctx.beginPath(); ctx.moveTo(gx,mid); ctx.lineTo(gx,lo); ctx.lineTo(gx+sw*0.18,lo); ctx.lineTo(gx+sw*0.18,mid); ctx.stroke();
+  } else if (type === 'dead') {
+    ctx.strokeStyle = '#c62828'; ctx.shadowColor = '#c62828'; ctx.shadowBlur = 4;
+    ctx.beginPath(); ctx.moveTo(0,lo); ctx.lineTo(W,lo); ctx.stroke();
+    ctx.shadowBlur = 0; ctx.strokeStyle = 'rgba(46,125,50,.4)'; ctx.setLineDash([4,5]);
+    ctx.beginPath(); ctx.moveTo(0,mid); ctx.lineTo(W,mid); ctx.stroke(); ctx.setLineDash([]);
+  } else if (type === 'wrong') {
+    ctx.strokeStyle = '#c62828'; ctx.shadowColor = '#c62828'; ctx.shadowBlur = 3;
+    drawSq(ctx, W, mid, lo, 14); // D4 = more segs
+    ctx.shadowBlur = 0; ctx.setLineDash([3,4]); ctx.strokeStyle = 'rgba(46,125,50,.55)';
+    drawSq(ctx, W, mid, lo, 11); // C4 reference
+    ctx.setLineDash([]);
+  } else if (type === 'noaudio') {
+    ctx.globalAlpha = 0.45; ctx.strokeStyle = '#1a7a40'; ctx.shadowBlur = 0;
+    drawSq(ctx, W, mid, lo, 11); ctx.globalAlpha = 1;
+    // X mark
+    ctx.strokeStyle = 'rgba(198,40,40,.5)'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(W*0.08,H*0.12); ctx.lineTo(W*0.92,H*0.88); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(W*0.92,H*0.12); ctx.lineTo(W*0.08,H*0.88); ctx.stroke();
+  } else if (type === 'inaud') {
+    ctx.globalAlpha = 0.2; ctx.strokeStyle = '#1a7a40';
+    drawSq(ctx, W, mid, lo, 11); ctx.globalAlpha = 1;
   }
-  updateUI();
+  ctx.shadowBlur = 0;
 }
 
-function clearAll() { pressed.clear(); updateUI(); }
-
-// ===== ANIMATION =====
-function toggleAnim() {
-  animPlaying = !animPlaying;
-  const btn = document.getElementById('btnAnimate');
-  if (animPlaying) {
-    btn.textContent = '⏸ PAUSE ANIMATION';
-    btn.classList.remove('primary');
-    btn.style.background = '';
-    btn.style.color = '';
-    lastTs = null;
-    requestAnimationFrame(animate);
-  } else {
-    btn.textContent = '▶ PLAY ANIMATION';
-    btn.classList.add('primary');
-    cancelAnimationFrame(animId);
-  }
-}
-
-function animate(ts) {
-  if (!animPlaying) return;
-  if (lastTs === null) lastTs = ts;
-  const dt = ts - lastTs; lastTs = ts;
-  const speed = parseFloat(document.getElementById('speedRange').value);
-  phase += (dt / 1000) * speed * 3;
-  sampleIdx = Math.floor(phase * 8) % SAMPLES;
-  updateUI();
-  animId = requestAnimationFrame(animate);
-}
-
-// ===== UPDATE UI =====
-function updateUI() {
-  const activeNotes = NOTES.filter(n => pressed.has(n.name));
-  const count = activeNotes.length;
-
-  NOTES.forEach(n => {
-    document.getElementById('key-' + n.name)?.classList.toggle('pressed', pressed.has(n.name));
-    document.getElementById('chip-' + n.name)?.classList.toggle('on', pressed.has(n.name));
-  });
-
-  document.getElementById('infoNotes').textContent = count + ' / 4';
-  document.getElementById('infoI').textContent = sampleIdx + '/511';
-
-  let ampSum = 0;
-  activeNotes.forEach(n => { ampSum += n.lut[sampleIdx]; });
-  document.getElementById('infoAmp').textContent = ampSum;
-
-  const pwmMax = AMP_MAX * 4;
-  const duty = Math.round(Math.max(0, ampSum + pwmMax/2) / pwmMax * 100);
-  document.getElementById('infoDuty').textContent = duty + '%';
-
-  // Sum badge
-  const sumCard = document.getElementById('waveSumCard');
-  sumCard.classList.toggle('active', count > 0);
-  document.getElementById('waveSumLabel').textContent =
-    count > 0 ? count + ' note' + (count > 1 ? 's' : '') + ' active' : '0 notes active';
-
-  // Chord detection
-  const key = [...pressed].sort().join(',');
-  const chord = CHORDS[key] || '';
-  const cb = document.getElementById('chordBadge');
-  cb.textContent = chord; cb.classList.toggle('visible', !!chord);
-
-  // Individual label
-  document.getElementById('waveIndLabel').textContent =
-    activeNotes.length > 0 ? activeNotes.map(n => n.name).join(' + ') : '—';
-
-  // Freq label
-  document.getElementById('waveFreqLabel').textContent =
-    activeNotes.length > 0 ? activeNotes.map(n => n.freq + 'Hz').join(', ') : 'C4–C5 range';
-
-  // Formula
-  if (activeNotes.length > 0) {
-    const n = activeNotes[0];
-    document.getElementById('formulaDisplay').innerHTML =
-      `Freq_Cnt = 100,000,000 ÷ (<span class="hi">${n.freq} Hz</span> × 64) = <span class="hi">${n.freqCnt}</span> = <span class="hi">${n.hexCnt}</span>`;
-  } else {
-    document.getElementById('formulaDisplay').innerHTML =
-      `Freq_Cnt = 100,000,000 ÷ (freq × 64) &nbsp;|&nbsp; <span class="hi">กดโน้ตเพื่อดูค่า</span>`;
-  }
-
-  // Legend
-  buildLegend(activeNotes);
-
-  drawAll(activeNotes);
-}
-
-function buildLegend(activeNotes) {
-  const leg = document.getElementById('waveLegend');
-  leg.innerHTML = '';
-  activeNotes.forEach(n => {
-    const item = document.createElement('div');
-    item.className = 'legend-item';
-    item.innerHTML = `<div class="legend-dot" style="background:${n.color}"></div>${n.name} · ${n.freq}Hz`;
-    leg.appendChild(item);
-  });
-}
-
-// ===== DRAWING =====
-function getCtx(id) {
-  const cv = document.getElementById(id);
-  const W = cv.parentElement.offsetWidth - 40;
-  cv.width = W;
-  return { cv, ctx: cv.getContext('2d'), W, H: cv.height };
-}
-
-function drawGrid(ctx, W, H, pl, pr, pt, pb, light) {
-  const plotW = W - pl - pr;
-  const plotH = H - pt - pb;
-  const midY  = pt + plotH / 2;
-  const alpha = light ? 'rgba(0,0,0,0.05)' : 'rgba(0,0,0,0.06)';
-
-  // horizontal rules
-  ctx.lineWidth = 0.75;
-  [-1, -0.5, 0, 0.5, 1].forEach(v => {
-    const y = midY - v * (plotH / 2 - 4);
-    ctx.strokeStyle = v === 0 ? 'rgba(0,0,0,0.18)' : alpha;
-    ctx.lineWidth   = v === 0 ? 1 : 0.75;
-    ctx.beginPath(); ctx.moveTo(pl, y); ctx.lineTo(W - pr, y); ctx.stroke();
-  });
-
-  // vertical axis
-  ctx.strokeStyle = 'rgba(0,0,0,0.18)';
-  ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.moveTo(pl, pt); ctx.lineTo(pl, H - pb); ctx.stroke();
-
-  // y labels
-  ctx.fillStyle = 'rgba(0,0,0,0.3)';
-  ctx.font = '9px IBM Plex Mono, monospace';
-  ctx.textAlign = 'right';
-  [1, 0, -1].forEach(v => {
-    const y = midY - v * (plotH / 2 - 4);
-    ctx.fillText(v === 1 ? '+511' : v === -1 ? '−511' : '0', pl - 4, y + 3);
-  });
-}
-
-function drawSine(ctx, lut, W, H, pl, pr, pt, pb, color, alpha, lw) {
-  const plotW = W - pl - pr;
-  const plotH = H - pt - pb;
-  const midY  = pt + plotH / 2;
-  const xStep = plotW / SAMPLES;
-  ctx.strokeStyle = color;
-  ctx.globalAlpha = alpha || 1;
-  ctx.lineWidth   = lw || 2;
-  ctx.lineJoin    = 'round';
+function drawSq(ctx, W, mid, lo, segs) {
+  const sw = W/segs;
   ctx.beginPath();
-  lut.forEach((v, i) => {
-    const x = pl + (i + 0.5) * xStep;
-    const y = midY - (v / AMP_MAX) * (plotH / 2 - 4);
-    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-  });
+  for (let i=0;i<segs;i++) {
+    const x=i*sw; if(i===0) ctx.moveTo(x,mid);
+    ctx.lineTo(x+sw*0.5,mid); ctx.lineTo(x+sw*0.5,lo); ctx.lineTo(x+sw,lo);
+    if(i<segs-1) ctx.lineTo(x+sw,mid);
+  }
   ctx.stroke();
-  ctx.globalAlpha = 1;
 }
 
-function drawPlayhead(ctx, lut, W, H, pl, pr, pt, pb, color) {
-  const plotW = W - pl - pr;
-  const plotH = H - pt - pb;
-  const midY  = pt + plotH / 2;
-  const xStep = plotW / SAMPLES;
-  const x = pl + (sampleIdx + 0.5) * xStep;
-  const y = midY - (lut[sampleIdx] / AMP_MAX) * (plotH / 2 - 4);
+/* ─── Test Section Oscilloscope ─── */
+function drawOsc(type) {
+  const cv = document.getElementById('oscCanvas');
+  if (!cv) return;
+  const W = cv.offsetWidth || 270, H = 70;
+  cv.width = W; cv.height = H;
+  const ctx = cv.getContext('2d');
+  ctx.clearRect(0,0,W,H);
+  const mid = H*0.28, lo = H*0.78;
+  ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
 
-  // dashed vertical
-  ctx.setLineDash([3, 3]);
-  ctx.strokeStyle = color; ctx.globalAlpha = 0.25; ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.moveTo(x, pt); ctx.lineTo(x, H - pb); ctx.stroke();
-  ctx.setLineDash([]); ctx.globalAlpha = 1;
-
-  // dot
-  ctx.beginPath(); ctx.arc(x, y, 5, 0, Math.PI * 2);
-  ctx.fillStyle = color; ctx.fill();
-
-  // ring
-  ctx.beginPath(); ctx.arc(x, y, 9, 0, Math.PI * 2);
-  ctx.strokeStyle = color; ctx.lineWidth = 1.5;
-  ctx.globalAlpha = 0.3; ctx.stroke(); ctx.globalAlpha = 1;
+  if (type === 'glitch') {
+    ctx.strokeStyle = '#1a7a40'; ctx.shadowColor='#1a7a40'; ctx.shadowBlur=4;
+    const sw=W/12;
+    ctx.beginPath();
+    for(let i=0;i<12;i++){
+      const x=i*sw; if(i===0) ctx.moveTo(x,mid);
+      const drop=(i===5||i===9);
+      ctx.lineTo(x,drop?lo:mid); ctx.lineTo(x+sw*(drop?.25:.85),drop?lo:mid);
+      if(drop){ctx.lineTo(x+sw*.25,mid);ctx.lineTo(x+sw,mid);}
+    }
+    ctx.stroke();
+    ctx.strokeStyle='#c62828'; ctx.shadowColor='#c62828'; ctx.lineWidth=1.5;
+    ctx.beginPath();
+    [5,9].forEach(i=>{const x=i*sw;ctx.moveTo(x,mid);ctx.lineTo(x,lo);ctx.lineTo(x+sw*.25,lo);ctx.lineTo(x+sw*.25,mid);});
+    ctx.stroke();
+  } else if (type === 'flat') {
+    ctx.strokeStyle='#c62828'; ctx.shadowColor='#c62828'; ctx.shadowBlur=4;
+    ctx.beginPath(); ctx.moveTo(0,lo); ctx.lineTo(W,lo); ctx.stroke();
+    ctx.shadowBlur=0; ctx.strokeStyle='rgba(46,125,50,.4)'; ctx.setLineDash([4,5]);
+    ctx.beginPath(); ctx.moveTo(0,mid); ctx.lineTo(W,mid); ctx.stroke(); ctx.setLineDash([]);
+  } else if (type === 'wrong-freq') {
+    ctx.strokeStyle='#c62828'; ctx.shadowColor='#c62828'; ctx.shadowBlur=3;
+    drawSq(ctx,W,mid,lo,15);
+    ctx.shadowBlur=0; ctx.setLineDash([3,4]); ctx.strokeStyle='rgba(46,125,50,.55)';
+    drawSq(ctx,W,mid,lo,12); ctx.setLineDash([]);
+  } else if (type === 'pwm-ok') {
+    ctx.strokeStyle='#1a7a40'; ctx.shadowColor='#1a7a40'; ctx.shadowBlur=5;
+    drawSq(ctx,W,mid,lo,11);
+  }
+  ctx.shadowBlur=0;
 }
 
-function drawAll(activeNotes) {
-  // ---- Individual waves ----
-  {
-    const { ctx, W, H } = getCtx('cvInd');
-    ctx.clearRect(0, 0, W, H);
-    const pl = 40, pr = 12, pt = 14, pb = 22;
+/* ─── Render ─── */
+function render() {
+  const c = CASES[caseIdx];
 
-    // BG tint
-    ctx.fillStyle = '#fafaf9';
-    ctx.fillRect(pl, pt, W - pl - pr, H - pt - pb);
+  // Titles
+  document.getElementById('faId').textContent = c.id + '  ·  case ' + (caseIdx+1) + ' of ' + CASES.length;
+  document.getElementById('faTitle').textContent = c.title;
+  const badge = document.getElementById('faBadge');
+  badge.textContent = c.badgeText; badge.className = 'badge ' + c.badge;
 
-    drawGrid(ctx, W, H, pl, pr, pt, pb);
+  // Case pills
+  const cp = document.getElementById('casePills');
+  cp.innerHTML = '';
+  CASES.forEach((cs, i) => {
+    const p = document.createElement('button');
+    p.className = 'case-pill' + (i===caseIdx?' active':'');
+    p.textContent = cs.id;
+    p.onclick = () => { caseIdx=i; stepIdx=0; render(); };
+    cp.appendChild(p);
+  });
 
-    if (activeNotes.length === 0) {
-      ctx.fillStyle = 'rgba(0,0,0,0.2)';
-      ctx.font = '12px IBM Plex Mono, monospace';
-      ctx.textAlign = 'center';
-      ctx.fillText('กดปุ่มโน้ตเพื่อดู Sine Wave', W / 2, H / 2);
-    } else {
-      activeNotes.forEach((n, idx) => {
-        // shade under curve
-        const plotW = W - pl - pr;
-        const plotH = H - pt - pb;
-        const midY  = pt + plotH / 2;
-        const xStep = plotW / SAMPLES;
+  // Step tabs
+  const tabs = document.getElementById('stepTabs');
+  tabs.innerHTML = '';
+  SLABELS.forEach((lbl, i) => {
+    const t = document.createElement('div');
+    const isDone = i < stepIdx;
+    t.className = 'step-tab' + (i===stepIdx?' active':isDone?' done':'');
+    t.textContent = isDone ? lbl + ' ✓' : lbl;
+    tabs.appendChild(t);
+  });
 
-        ctx.save();
-        ctx.beginPath();
-        ctx.moveTo(pl + 0.5 * xStep, midY);
-        n.lut.forEach((v, i) => {
-          const x = pl + (i + 0.5) * xStep;
-          const y = midY - (v / AMP_MAX) * (plotH / 2 - 4);
-          ctx.lineTo(x, y);
-        });
-        ctx.lineTo(pl + (SAMPLES - 0.5) * xStep, midY);
-        ctx.closePath();
-        ctx.globalAlpha = 0.07;
-        ctx.fillStyle = n.color;
-        ctx.fill();
-        ctx.restore();
+  // Show/hide sections
+  ['symptom','hypothesis','test','result'].forEach((s,i) => {
+    document.getElementById('sec-'+s).classList.toggle('visible', i===stepIdx);
+  });
 
-        drawSine(ctx, n.lut, W, H, pl, pr, pt, pb, n.color, 1, 2.2);
-        drawPlayhead(ctx, n.lut, W, H, pl, pr, pt, pb, n.color);
+  // Symptom
+  document.getElementById('txt-symptom').textContent = c.symptom;
 
-        // label on wave
-        ctx.fillStyle = n.color;
-        ctx.font = 'bold 10.5px IBM Plex Mono, monospace';
-        ctx.textAlign = 'left';
-        ctx.globalAlpha = 0.85;
-        ctx.fillText(n.name, pl + 8 + idx * 52, pt + 14);
-        ctx.globalAlpha = 1;
-      });
-    }
-  }
+  // Sim area setup
+  clearKeys();
+  document.getElementById('simResult').style.display = 'none';
+  document.getElementById('gainRow').style.display = (caseIdx===4) ? 'block' : 'none';
+  lastPressedNote = null;
+  document.getElementById('simHint').textContent =
+    caseIdx===0 ? 'random glitch ~45% →' :
+    caseIdx===1 ? 'try F4 key →' :
+    caseIdx===2 ? 'try C4 key →' :
+    caseIdx===3 ? 'press any key →' :
+    'adjust gain, then press →';
 
-  // ---- Frequency overview ----
-  {
-    const { ctx, W, H } = getCtx('cvFreq');
-    ctx.clearRect(0, 0, W, H);
-    const pl = 40, pr = 12, pt = 14, pb = 22;
+  // FA-02: mark F4 as dead visually
+  const f4 = document.getElementById('key-F4');
+  if (caseIdx===1) f4.classList.add('dead'); else f4.classList.remove('dead');
 
-    ctx.fillStyle = '#fafaf9';
-    ctx.fillRect(pl, pt, W - pl - pr, H - pt - pb);
-    drawGrid(ctx, W, H, pl, pr, pt, pb);
+  // Hypothesis
+  const hl = document.getElementById('txt-hypothesis');
+  hl.innerHTML = '';
+  c.hypothesis.forEach((h,i) => {
+    const li = document.createElement('li');
+    const hn = document.createElement('span');
+    hn.className = 'hn'; hn.textContent = 'H'+(i+1);
+    li.appendChild(hn); li.appendChild(document.createTextNode(h));
+    hl.appendChild(li);
+  });
 
-    if (activeNotes.length === 0) {
-      // Show all notes faintly
-      NOTES.forEach(n => {
-        drawSine(ctx, n.freqLut, W, H, pl, pr, pt, pb, n.color, 0.18, 1.2);
-      });
-      ctx.fillStyle = 'rgba(0,0,0,0.2)';
-      ctx.font = '11px IBM Plex Mono, monospace';
-      ctx.textAlign = 'center';
-      ctx.fillText('กดโน้ตเพื่อดูคลื่นตามความถี่จริง', W / 2, H / 2 - 8);
-    } else {
-      // Show all faint, active highlighted with real freq ratio
-      NOTES.forEach(n => {
-        const isActive = pressed.has(n.name);
-        drawSine(ctx, n.freqLut, W, H, pl, pr, pt, pb, n.color, isActive ? 0 : 0.12, 1);
-      });
-      activeNotes.forEach(n => {
-        drawSine(ctx, n.freqLut, W, H, pl, pr, pt, pb, n.color, 1, 2.2);
-        drawPlayhead(ctx, n.freqLut, W, H, pl, pr, pt, pb, n.color);
-      });
+  // Test
+  document.getElementById('txt-test').textContent = c.test;
+  const mr = document.getElementById('mm-rows');
+  mr.innerHTML = '';
+  c.mm.forEach(r => {
+    const row = document.createElement('div');
+    row.className = 'mm-row ' + r.cls;
+    row.innerHTML = `<span class="mm-label">${r.label}</span><span class="mm-val ${r.cls}">${r.val}</span>`;
+    mr.appendChild(row);
+  });
+  document.getElementById('oscLabel').textContent = c.oscLabel;
+  if (stepIdx===2) setTimeout(()=>drawOsc(c.oscType), 30);
 
-      // freq labels top
-      const plotW = W - pl - pr;
-      activeNotes.forEach((n, i) => {
-        ctx.fillStyle = n.color;
-        ctx.font = 'bold 10px IBM Plex Mono, monospace';
-        ctx.textAlign = 'left';
-        ctx.fillText(n.freq + ' Hz', pl + 8 + i * 80, pt + 14);
-      });
-    }
-  }
+  // Result
+  document.getElementById('txt-cause').textContent = c.cause;
+  document.getElementById('txt-fix').textContent = c.fix;
 
-  // ---- Sum wave ----
-  {
-    const { ctx, W, H } = getCtx('cvSum');
-    ctx.clearRect(0, 0, W, H);
-    const pl = 48, pr = 12, pt = 14, pb = 24;
-    const plotW = W - pl - pr;
-    const plotH = H - pt - pb;
-    const midY  = pt + plotH / 2;
-
-    ctx.fillStyle = '#fafaf9';
-    ctx.fillRect(pl, pt, plotW, plotH);
-    drawGrid(ctx, W, H, pl, pr, pt, pb);
-
-    if (activeNotes.length === 0) {
-      ctx.fillStyle = 'rgba(0,0,0,0.2)';
-      ctx.font = '12px IBM Plex Mono, monospace';
-      ctx.textAlign = 'center';
-      ctx.fillText('กด 2+ โน้ตพร้อมกัน เพื่อดูการรวมคลื่น (Polyphony)', W / 2, H / 2);
-    } else {
-      // draw individual waves faintly
-      activeNotes.forEach(n => {
-        drawSine(ctx, n.lut, W, H, pl, pr, pt, pb, n.color, 0.18, 1.2);
-      });
-
-      // compute sum
-      const xStep  = plotW / SAMPLES;
-      const maxAmp = AMP_MAX * Math.max(activeNotes.length, 1);
-      const sumLut = [];
-      for (let i = 0; i < SAMPLES; i++) {
-        let s = 0; activeNotes.forEach(n => s += n.lut[i]); sumLut.push(s);
-      }
-
-      // filled area under sum
-      ctx.save();
-      ctx.beginPath();
-      sumLut.forEach((v, i) => {
-        const x = pl + (i + 0.5) * xStep;
-        const y = midY - (v / maxAmp) * (plotH / 2 - 6);
-        i === 0 ? ctx.moveTo(x, midY) : ctx.lineTo(x, y);
-      });
-      ctx.lineTo(pl + (SAMPLES - 0.5) * xStep, midY);
-      ctx.closePath();
-      const grad = ctx.createLinearGradient(0, pt, 0, H - pb);
-      grad.addColorStop(0,   'rgba(26,25,23,0.12)');
-      grad.addColorStop(0.5, 'rgba(26,25,23,0.04)');
-      grad.addColorStop(1,   'rgba(26,25,23,0.01)');
-      ctx.fillStyle = grad; ctx.fill();
-      ctx.restore();
-
-      // sum line
-      ctx.strokeStyle = '#1a1917';
-      ctx.lineWidth = 2.5;
-      ctx.lineJoin = 'round';
-      ctx.beginPath();
-      sumLut.forEach((v, i) => {
-        const x = pl + (i + 0.5) * xStep;
-        const y = midY - (v / maxAmp) * (plotH / 2 - 6);
-        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-      });
-      ctx.stroke();
-
-      // playhead on sum
-      const cx = pl + (sampleIdx + 0.5) * xStep;
-      const cy = midY - (sumLut[sampleIdx] / maxAmp) * (plotH / 2 - 6);
-      ctx.beginPath(); ctx.arc(cx, cy, 6, 0, Math.PI * 2);
-      ctx.fillStyle = '#1a1917'; ctx.fill();
-      ctx.beginPath(); ctx.arc(cx, cy, 11, 0, Math.PI * 2);
-      ctx.strokeStyle = '#1a1917'; ctx.lineWidth = 1.5;
-      ctx.globalAlpha = 0.2; ctx.stroke(); ctx.globalAlpha = 1;
-
-      // sum y labels
-      ctx.fillStyle = 'rgba(0,0,0,0.35)';
-      ctx.font = '9px IBM Plex Mono, monospace';
-      ctx.textAlign = 'right';
-      [1, 0, -1].forEach(v => {
-        const y = midY - v * (plotH / 2 - 4);
-        ctx.fillText(v === 0 ? '0' : (v > 0 ? '+' : '−') + Math.round(Math.abs(v) * maxAmp), pl - 4, y + 3);
-      });
-
-      // "Σ =" label
-      ctx.fillStyle = '#1a1917';
-      ctx.font = 'bold 10px IBM Plex Mono, monospace';
-      ctx.textAlign = 'left';
-      const activeNames = activeNotes.map(n => n.name).join(' + ');
-      ctx.fillText('Σ = ' + activeNames, pl + 8, pt + 14);
-    }
-  }
-
-  // ---- PWM ----
-  {
-    const { ctx, W, H } = getCtx('cvPWM');
-    ctx.clearRect(0, 0, W, H);
-
-    const activeN = NOTES.filter(n => pressed.has(n.name));
-    let ampSum = 0;
-    activeN.forEach(n => { ampSum += n.lut[sampleIdx]; });
-    const pwmMax = AMP_MAX * 4;
-    const duty = Math.max(0, Math.min(1, (ampSum + pwmMax / 2) / pwmMax));
-
-    const segW = 56;
-    const numSegs = Math.floor(W / segW);
-    const yHi = 10, yLo = H - 10;
-
-    ctx.strokeStyle = '#e67c00';
-    ctx.lineWidth = 2;
-
-    let x = 0;
-    for (let i = 0; i < numSegs; i++) {
-      const onW  = segW * duty;
-      const offW = segW - onW;
-      ctx.beginPath(); ctx.moveTo(x, yHi); ctx.lineTo(x + onW, yHi); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(x + onW, yHi); ctx.lineTo(x + onW, yLo); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(x + onW, yLo); ctx.lineTo(x + segW, yLo); ctx.stroke();
-      if (i < numSegs - 1) {
-        ctx.beginPath(); ctx.moveTo(x + segW, yLo); ctx.lineTo(x + segW, yHi); ctx.stroke();
-      }
-      x += segW;
-    }
-
-    ctx.fillStyle = '#e67c00';
-    ctx.font = '10.5px IBM Plex Mono, monospace';
-    ctx.textAlign = 'right';
-    ctx.fillText(`Duty = ${Math.round(duty * 100)}% · ping_length ∝ amplitude`, W - 8, H - 4);
-  }
+  // Nav
+  document.getElementById('stepCtr').textContent = 'step '+(stepIdx+1)+' / '+STEPS.length;
+  document.getElementById('btnPrev').disabled = stepIdx===0;
+  const nb = document.getElementById('btnNext');
+  nb.textContent = stepIdx===STEPS.length-1 ? 'done ✓' : 'next →';
 }
 
-// ===== INIT =====
-buildPiano();
-updateUI();
+function nextStep() { if(stepIdx<STEPS.length-1){stepIdx++;render();} }
+function prevStep() { if(stepIdx>0){stepIdx--;render();} }
+function nextCase() { caseIdx=(caseIdx+1)%CASES.length; stepIdx=0; render(); }
+function prevCase() { caseIdx=(caseIdx-1+CASES.length)%CASES.length; stepIdx=0; render(); }
 
-document.getElementById('speedRange').addEventListener('input', function() {
-  document.getElementById('speedLabel').textContent = parseFloat(this.value).toFixed(1) + 'x';
-});
-window.addEventListener('resize', updateUI);
+render();
 </script>
 </body>
 </html>
